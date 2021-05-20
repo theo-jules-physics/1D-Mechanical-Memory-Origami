@@ -1,0 +1,222 @@
+%%
+% Tikz-powered laser cutter pattern generator.
+% Draws strips used to construct isotropic Kresling bellows found in 
+% https://doi.org/10.1103/PhysRevE.95.013002
+%
+% This file is somewhat simplified, and can generate a stack of Kresling cells with of varying phi_1, phi_2.
+%
+% Austin Reid, 2018-07-17
+\documentclass[tikz,margin = 0.3cm]{standalone}
+% \documentclass[11pt, oneside]{article}
+% \usepackage[paperheight=10cm, paperwidth=35cm, margin = 0cm, top = .5cm]{geometry}
+% \usepackage[letterpaper, margin=0cm]{geometry}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{siunitx,amssymb}
+\usepackage{calc}
+\usetikzlibrary{calc}
+
+% Laser cutter recognizes red hairlines as cutting coordinates. If a line is repeated, the cutting operation will be repeated as well. Blue is used for rastered etching, which can be useful for etching text labels.
+
+\definecolor{RedCut}{HTML}{FF0000}
+\definecolor{PureBlue}{HTML}{0000FF}
+
+% The most complicated cutting patterns are not terribly large, and it is occasionally useful to inspect the pdf itself to make sure the lines were defined how you intended.
+\pdfcompresslevel=0
+\pdfobjcompresslevel=0
+
+% Naming conventions follow those of the PhysRevE paper listed above.
+% n is the number of strips used to construct a single bellows.
+% l_1 == lone, which establishes the size of the entire unit cell.
+% boxtip is the size of the rectangular box added at the top and bottom of the pattern to attach bellows to test fixtures.
+% tabsize is the width of the tabs added to each strip so they can be joined together.
+% kappavar establishes the softness of the fold: this is the length of any given "softened" fold that is *not* cut away.
+% links controls how many parts that remaining length fraction is divided into.
+% Take care when changing kappa and links, as it is easy to make each link too thin, at which point the laser's kerf winds up separating parts that should still be connected.
+
+\pgfmathsetmacro{\n}{5}
+\pgfmathsetmacro{\lone}{3.2}
+
+\pgfmathsetmacro{\boxtip}{1}
+
+\pgfmathsetmacro{\tabsize}{0.6}
+
+\pgfmathsetmacro{\kappavar}{0.3}
+\pgfmathsetmacro{\links}{7}
+
+%% ltwo<lone
+% \pgfmathsetmacro{\minkappa}{\ltwo*\kappavar/3}
+
+% Produces an attached but foldable line starting at (x,y),
+% oriented by the polar vector (r,theta).
+\newcommand{\soften}[4]{
+% \soften{x}{y}{r}{theta}
+\pgfmathsetmacro{\step}{#3*\kappavar/\links}
+\pgfmathsetmacro{\offset}{0.025}
+\pgfmathsetmacro{\top}{#4+90}
+\pgfmathsetmacro{\bottom}{#4-90}
+\draw[color = RedCut] (#1,#2)++(\top:\offset) -- ++(#4:\step);
+\draw[color = RedCut] (#1,#2)++(\bottom:\offset) -- ++(#4:\step);
+\draw[color = RedCut] (#1,#2)++(\top:\offset)+(#4:#3-\step) -- +(#4:#3);
+\draw[color = RedCut] (#1,#2)++(\bottom:\offset)+(#4:#3-\step) -- +(#4:#3);
+% \pgfmathsetmacro{\midl}{#3-4*\step}
+\pgfmathsetmacro{\cutl}{(#3-(4+\links-2)*\step)/(\links-1)}
+\pgfmathsetmacro{\legs}{\links-2}
+\foreach \i in {0,...,\legs}{
+\draw[color=RedCut] (#1,#2)++(\top:\offset)++(#4:2*\step)++(#4:\i*\step)++(#4:\i*\cutl)--++(#4:\cutl);
+\draw[color=RedCut] (#1,#2)++(\bottom:\offset)++(#4:2*\step)++(#4:\i*\step)++(#4:\i*\cutl)--++(#4:\cutl);
+}
+}
+
+% Same as soften, but with fewer links. Use this for very short creases.
+\newcommand{\thicksoften}[4]{
+\pgfmathsetmacro{\plinks}{4}
+\pgfmathsetmacro{\step}{#3*1.5*\kappavar/\plinks}
+\pgfmathsetmacro{\offset}{0.025}
+\pgfmathsetmacro{\top}{#4+90}
+\pgfmathsetmacro{\bottom}{#4-90}
+\draw[color = RedCut] (#1,#2)++(\top:\offset) -- ++(#4:\step);
+\draw[color = RedCut] (#1,#2)++(\bottom:\offset) -- ++(#4:\step);
+\draw[color = RedCut] (#1,#2)++(\top:\offset)+(#4:#3-\step) -- +(#4:#3);
+\draw[color = RedCut] (#1,#2)++(\bottom:\offset)+(#4:#3-\step) -- +(#4:#3);
+% \pgfmathsetmacro{\midl}{#3-4*\step}
+\pgfmathsetmacro{\cutl}{(#3-(4+\plinks-2)*\step)/(\plinks-1)}
+\pgfmathsetmacro{\legs}{\plinks-2}
+\foreach \i in {0,...,\legs}{
+\draw[color=RedCut] (#1,#2)++(\top:\offset)++(#4:2*\step)++(#4:\i*\step)++(#4:\i*\cutl)--++(#4:\cutl);
+\draw[color=RedCut] (#1,#2)++(\bottom:\offset)++(#4:2*\step)++(#4:\i*\step)++(#4:\i*\cutl)--++(#4:\cutl);
+}
+}
+
+% Same as soften, but cuts instead.
+\newcommand{\cut}[4]{
+% \cut{x}{y}{r}{theta}
+\draw[color = RedCut] (#1, #2) -- ++(#4:#3);
+}
+
+% cut out tab along left edge of pattern, matching top/bottom angles so the assembled tab doesn't overlap with folds on the assembled device.
+\newcommand{\tab}[7]{
+% {l}{angle}{firstwedge}{secondwedge}{tabh}{x0}{y0}
+	\pgfmathsetmacro{\step}{#1*\kappavar/\links}
+	% \pgfmathsetmacro{#5}{0.2}
+
+	% \pgfmathsetmacro{\alpha}{\phione-\phitwo}
+	% \pgfmathsetmacro{\angle}{180-\phione}
+	% \pgfmathsetmacro{\beta}{\angle}
+
+	\pgfmathsetmacro{\la}{#5/sin(#3)}
+	\pgfmathsetmacro{\lb}{#5/sin(#4)}
+	\pgfmathsetmacro{\lm}{#1-\step-#5/tan(#3)-#5/tan(#4)}
+	\pgfmathparse{#2-#4}
+	\pgfmathsetmacro{\debug}{\pgfmathresult}
+	\draw[color=RedCut] (#6,#7)++(#2:\step/2)--++(#2+#3:\la)--++(#2:\lm)--++(\debug:\lb);
+	% \draw[color=blue] (#6,#7)++(#2:#1)++(#2:-\step/2)--++(\debug:-\lb);
+}
+
+
+\begin{document}
+% Make all lines "cut" lines.
+\tikzset{every picture/.style={line width=1pt}}
+
+\pagenumbering{gobble}
+
+\begin{tikzpicture}[xscale=1, yscale=1]
+
+% Pattern is sized for letter paper, with three strips cut out of one sheet, and two strips cut out of an adjacent sheet.
+% \foreach \pager in {0,1}{
+\foreach \pager in {0}{
+\pgfmathtruncatemacro{\pagen}{3-\pager}
+\begin{scope}[xshift=21*\pager cm]
+% \foreach \iterator in {1,...,\pagen}{
+\foreach \iterator in {1}{
+\pgfmathparse{\iterator*(\lone+\tabsize+0.2)}
+% \pgfmathparse{\iterator*\lone}
+\begin{scope}[xshift=\pgfmathresult cm,rotate=90]
+% \begin{scope}[xshift=\pgfmathresult cm]
+% \begin{scope}[xshift=\pgfmathresult cm,rotate=33]
+
+%%%%%%%%%%%%%%%%%%%%%%
+% cut out bottom box %
+%%%%%%%%%%%%%%%%%%%%%%
+
+\thicksoften{0}{0}{\boxtip}{-90}
+\soften{0}{-\boxtip}{\lone}{0}
+\draw[color=RedCut] (0,-\boxtip)--++(0,-\boxtip/2)--++(\lone,0)--++(0,\boxtip/2)--++(0,\boxtip);
+\draw[color=RedCut] (0,-0.05cm)--++(-\tabsize,0)--++(0,-\boxtip+0.1)--++(\tabsize,0);
+
+%%%%%%%%%%%%%%%%
+% cut out cell %
+%%%%%%%%%%%%%%%%
+
+\edef\basex{0}
+\xdef\basey{0}
+
+% Angles are set here!
+% \foreach \phione in {75,77,79,81}{
+\foreach \phioneA/\phioneB in {74/75, 76/77, 78/79, 80/81}{
+
+% This generates flat-foldable cells. phi_2 can be anything between (0,phi_1).
+\pgfmathsetmacro{\phitwoA}{\phioneA-180/\n}
+\pgfmathsetmacro{\phitwoB}{\phioneB-180/\n}
+
+%% If you want to manually specify phi_1 and phi_2, comment out the phitwo def above, and replace the above foreach with
+% \foreach \phione/\phitwo in {73/21,76/30,79/36}
+%% Where you have changed the supplied phi_1, phi_2 values to what you want.
+
+%Calculate all the useful lengths and angles to make a Kresling cell with the specified geometry.
+\pgfmathsetmacro{\tiponeA}{180-\phioneA}
+\pgfmathsetmacro{\phidiffA}{\phioneA-\phitwoA}
+\pgfmathsetmacro{\hA}{\lone/(cot(\phitwoA)-cot(\phioneA))}
+\pgfmathsetmacro{\ltwoA}{\hA/sin(\phioneA)}
+\pgfmathsetmacro{\lthreeA}{\hA/sin(\phitwoA)}
+\pgfmathsetmacro{\dxA}{\hA*cot(\phioneA)}
+
+
+\pgfmathsetmacro{\tiponeB}{180-\phioneB}
+\pgfmathsetmacro{\phidiffB}{\phioneB-\phitwoB}
+\pgfmathsetmacro{\hB}{\lone/(cot(\phitwoB)-cot(\phioneB))}
+\pgfmathsetmacro{\ltwoB}{\hB/sin(\phioneB)}
+\pgfmathsetmacro{\lthreeB}{\hB/sin(\phitwoB)}
+\pgfmathsetmacro{\dxB}{\hB*cot(\phioneB)}
+
+\edef\bandh{\hA+\hB}
+\edef\deltax{\dxB-\dxA}
+
+% Make the kresling cell.
+\soften{\basex}{\basey}{\lone}{0}
+\soften{\basex}{\basey}{\ltwoA}{180-\phioneA}
+\soften{\basex+\lone}{\basey}{\lthreeA}{180-\phitwoA}
+\cut{\basex+\lone}{\basey}{\ltwoA}{180-\phioneA}
+\soften{\basex-\dxA}{\basey+\hA}{\lone}{0}
+\tab{\ltwoA}{\tiponeA}{\phidiffA}{\tiponeA}{\tabsize}{\basex}{\basey}
+
+\soften{\basex-\dxA}{\basey+\hA}{\ltwoB}{\phioneB}
+\soften{\basex-\dxA}{\basey+\hA}{\lthreeB}{\phitwoB}
+\cut{\basex-\dxA+\lone}{\basey+\hA}{\ltwoB}{\phioneB}
+\tab{\ltwoB}{\phioneB}{\tiponeB}{\phidiffB}{\tabsize}{\basex-\dxA}{\basey+\hA}
+
+\pgfmathparse{\basey+\bandh}
+\xdef\basey{\pgfmathresult}
+\pgfmathparse{\basex+\deltax}
+\xdef\basex{\pgfmathresult}
+}
+
+%%%%%%%%%%%%%%%%%%%
+% cut out top box %
+%%%%%%%%%%%%%%%%%%%
+
+\thicksoften{\basex}{\basey}{\boxtip}{90}
+\soften{\basex}{\basey+\boxtip}{\lone}{0}
+\soften{\basex}{\basey}{\lone}{0}
+\draw[color=RedCut] (\basex,\basey+\boxtip)--++(0,\boxtip/2)--++(\lone,0)--++(0,-\boxtip/2)--++(0,-\boxtip);
+\draw[color=RedCut] (\basex,\basey+0.05)--++(-\tabsize,0)--++(0,\boxtip-0.1)--++(\tabsize,0);
+
+
+\end{scope}
+}
+\end{scope}
+}
+
+\end{tikzpicture}
+
+\end{document}  
